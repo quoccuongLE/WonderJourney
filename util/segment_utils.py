@@ -64,7 +64,7 @@ def refine_disp_with_segments(disparity, segments, keep_threshold=7*0.3):
 
 
 def create_mask_generator():
-    sam_checkpoint = "/viscam/projects/wonderland/segment-anything/sam_vit_h_4b8939.pth"
+    sam_checkpoint = "weights/sam_vit_h_4b8939.pth"
     sam = sam_model_registry["vit_h"](checkpoint=sam_checkpoint)
     sam.to(device='cuda')
     mask_generator = SamAutomaticMaskGenerator(

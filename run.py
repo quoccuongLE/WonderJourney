@@ -7,13 +7,18 @@ from datetime import datetime
 from copy import deepcopy
 import json
 
-from transformers import OneFormerForUniversalSegmentation, OneFormerProcessor
+from transformers import (
+    OneFormerForUniversalSegmentation,
+    OneFormerProcessor,
+    T5EncoderModel,
+)
 import numpy as np
 import torch
 from omegaconf import OmegaConf
 from torchvision.transforms import ToPILImage, ToTensor
 from tqdm import tqdm
 from diffusers import StableDiffusionInpaintPipeline, AutoencoderKL, DPMSolverMultistepScheduler
+from models.inpainting_pipeline.pipeline_pixart_inpaint import PixArtAlphaInpaintPipeline
 import sys
 sys.path.append('midas_module')
 from midas_module.midas.model_loader import load_model
@@ -27,6 +32,8 @@ from util.utils import save_depth_map, prepare_scheduler
 from util.utils import load_example_yaml, merge_frames, merge_keyframes
 from util.segment_utils import create_mask_generator
 
+
+_dpt_depth_model_type = "DPT_Large"
 
 def evaluate(model):
     fps = model.config["save_fps"]
@@ -111,7 +118,7 @@ def run(config):
     if adaptive_negative_prompt != "":
         adaptive_negative_prompt += ", "
     all_keyframes = [start_keyframe]
-    
+
     if isinstance(control_text, list):
         config['num_scenes'] = len(control_text)
     pt_gen = TextpromptGen(config['runs_dir'], isinstance(control_text, list))
@@ -121,12 +128,26 @@ def run(config):
     scene_dict = {'scene_name': scene_name, 'entities': entities, 'style': style_prompt, 'background': background_prompt}
     inpainting_prompt = style_prompt + ', ' + content_prompt
 
-    inpainter_pipeline = StableDiffusionInpaintPipeline.from_pretrained(
-            config["stable_diffusion_checkpoint"],
-            safety_checker=None,
+    if config["stable_diffusion_checkpoint"] == "PixArt-alpha/PixArt-XL-2-512x512":
+        # text_encoder = T5EncoderModel.from_pretrained(
+        #     "PixArt-alpha/PixArt-XL-2-1024-MS",
+        #     subfolder="text_encoder",
+        #     load_in_8bit=True,
+        # ).to(config["device"])
+        inpainter_pipeline = PixArtAlphaInpaintPipeline.from_pretrained(
+            pretrained_model_name_or_path=config["stable_diffusion_checkpoint"],
+            # text_encoder=text_encoder,
+            use_safetensors=True,
             torch_dtype=torch.float16,
-            revision="fp16",
+            # transformer=None,
         ).to(config["device"])
+    else:
+        inpainter_pipeline = StableDiffusionInpaintPipeline.from_pretrained(
+                config["stable_diffusion_checkpoint"],
+                safety_checker=None,
+                torch_dtype=torch.float16,
+                revision="fp16",
+            ).to(config["device"])
     inpainter_pipeline.scheduler = DPMSolverMultistepScheduler.from_config(inpainter_pipeline.scheduler.config)
     inpainter_pipeline.scheduler = prepare_scheduler(inpainter_pipeline.scheduler)
     vae = AutoencoderKL.from_pretrained(config["stable_diffusion_checkpoint"], subfolder="vae").to(config["device"])
@@ -141,7 +162,7 @@ def run(config):
             control_text_this = control_text[i] if isinstance(control_text, list) else None
             scene_dict = pt_gen.run_conversation(scene_name=scene_dict['scene_name'], entities=scene_dict['entities'], style=style_prompt, background=scene_dict['background'], control_text=control_text_this)
         inpainting_prompt = pt_gen.generate_prompt(style=style_prompt, entities=scene_dict['entities'], background=scene_dict['background'], scene_name=scene_dict['scene_name'])
-        
+
         for j in range(config['num_keyframes']):
 
             ###### ------------------ Keyframe (the major part of point clouds) generation ------------------ ######
@@ -161,7 +182,8 @@ def run(config):
                 for regen_id in range(config['regenerate_times'] + 1):
                     if regen_id > 0:
                         seeding(-1)
-                    depth_model, _, _, _ = load_model(torch.device("cuda"), 'dpt_beit_large_512.pt', 'dpt_beit_large_512', optimize=False)
+                    depth_model, _, _, _ = load_model(torch.device("cuda"), 'weights/dpt_beit_large_512.pt', 'dpt_beit_large_512', optimize=False)
+                    # depth_model = torch.hub.load("intel-isl/MiDaS", _dpt_depth_model_type)
                     # first keyframe is loaded and estimated depth
                     kf_gen = KeyframeGen(config, inpainter_pipeline, mask_generator, depth_model, vae, rotation, 
                                         start_keyframe, inpainting_prompt, regen_negative_prompt + adaptive_negative_prompt,
@@ -195,7 +217,7 @@ def run(config):
 
                     with open(save_root / 'regenerate_info.json', 'w') as json_file:
                         json.dump(regenerate_information, json_file, indent=4)
-                    
+
                     if not regenerate:
                         break
                     if regen_id == config['regenerate_times'] -1:
@@ -243,7 +265,7 @@ def run(config):
 
                 kf_gen.refine_disp_with_segments(kf_idx, background_depth_cutoff=cutoff_depth + kf_gen.kf_delta_t)
                 save_depth_map(kf_gen.depths[-1].cpu().numpy(), save_root / 'kf2_ft_depth_processed', vmin=0, vmax=vmax)
-                    
+
                 kf_gen.vae.decoder = deepcopy(kf_gen.decoder_copy)
                 evaluate_epoch(kf_gen, kf_idx, vmax=vmax)
 
@@ -266,7 +288,7 @@ def run(config):
                     continue
 
             ###### ------------------ Keyframe interpolation (completing point clouds and rendering) ------------------ ######
-                
+            print("----------Keyframe interpolation----------")
             is_last_scene = i == config['num_scenes'] - 1
             is_last_keyframe = j == config['num_keyframes'] - 1
             try:
@@ -302,7 +324,7 @@ def run(config):
             # save_depth_map(kf2_depth_updated.detach().cpu().numpy(), save_root / 'kf2_depth_updated', vmin=0, vmax=vmax)
             kf_interp.reset_additional_point_cloud()
             kf_interp.update_additional_point_cloud(kf2_depth_updated, kf2_image_upsample, valid_mask=kf2_mask_upsample, camera=kf2_camera_upsample, points_2d=kf_interp.points_kf2)
-            
+
             kf_interp.depths[0] = F.interpolate(kf2_depth_updated, size=(512, 512), mode="nearest")
             # save_depth_map(kf_interp.depths[0].detach().cpu().numpy(), save_root / 'kf2_depth.png', vmin=0, vmax=cutoff_depth*0.95, save_clean=True)
             # save_point_cloud_as_ply(kf_interp.additional_points_3d*500, kf_interp.run_dir / 'kf2_point_cloud.ply', kf_interp.additional_colors)
@@ -341,7 +363,6 @@ def run(config):
         merge_frames(all_rundir, save_dir=save_dir, fps=config["save_fps"], is_forward=True, save_depth=False, save_gif=False)
     merge_keyframes(all_keyframes, save_dir=save_dir)
     pt_gen.write_all_content(save_dir=save_dir)
-
 
 
 if __name__ == "__main__":

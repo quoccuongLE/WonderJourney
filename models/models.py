@@ -235,7 +235,7 @@ class FrameSyn(torch.nn.Module):
             depth = 1 / disparity
         elif self.config['depth_model'].lower() == "zoedepth":
             # ZeoDepth
-            depth = self.depth_model(image)['metric_depth']
+            depth = self.depth_model(image)
         depth = depth + self.config['depth_shift']
         disparity = 1 / depth
         return depth, disparity
@@ -277,7 +277,7 @@ class FrameSyn(torch.nn.Module):
         if torch.isnan(total_loss):
             raise ValueError("Depth FT loss is NaN")
         # print both losses and total loss
-        print(f"(1000x) loss_align: {loss_align.item()*1000:.4f}, hinge_loss: {hinge_loss.item()*1000:.4f}, total_loss: {total_loss.item()*1000:.4f}")
+        # print(f"(1000x) loss_align: {loss_align.item()*1000:.4f}, hinge_loss: {hinge_loss.item()*1000:.4f}, total_loss: {total_loss.item()*1000:.4f}")
 
         return total_loss
 

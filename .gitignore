@@ -11,3 +11,8 @@ older*/
 *.pt
 environment.yml
 *zip*
+
+.venv/
+weights/
+tmp/
+clean.sh

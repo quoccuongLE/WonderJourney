@@ -16,7 +16,7 @@ import yaml
 import shutil
 from .general_utils import save_video
 from datetime import datetime
-
+from diffusers.configuration_utils import FrozenDict
 
 def find_biggest_connected_inpaint_region(mask):
     H, W = mask.shape
@@ -218,7 +218,6 @@ def save_depth_map(depth_map, file_name, vmin=None, vmax=None, save_clean=False)
     img.save(file_name, format='png')
     buf.close()
     plt.close()
-
 
 
 """

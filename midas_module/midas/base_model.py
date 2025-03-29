@@ -8,9 +8,9 @@ class BaseModel(torch.nn.Module):
         Args:
             path (str): file path
         """
-        parameters = torch.load(path, map_location=torch.device('cpu'))
+        parameters = torch.load(path, weights_only=False)
 
         if "optimizer" in parameters:
             parameters = parameters["model"]
 
-        self.load_state_dict(parameters)
+        self.load_state_dict(parameters, strict=False)

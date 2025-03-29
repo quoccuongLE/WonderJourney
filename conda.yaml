@@ -1,0 +1,32 @@
+name: wonderjourney
+channels:
+  - defaults
+  - pytorch
+  - conda-forge
+  - nvidia
+  - bottler
+dependencies:
+  - python=3.10
+  - pytorch::pytorch
+  - pytorch::torchvision
+  - pytorch-cuda
+  - conda-forge::fvcore
+  - conda-forge::iopath
+  - conda-forge::matplotlib
+  - conda-forge::opencv
+  - conda-forge::scikit-image
+  - conda-forge::diffusers
+  - conda-forge::transformers
+  - conda-forge::timm
+  - pytorch3d::pytorch3d
+  - pip
+  - pip:
+    - kornia
+    - pillow==9.2.0
+    - einops
+    - omegaconf
+    - av
+    - spacy
+    - segment-anything
+    - openai
+    - accelerate

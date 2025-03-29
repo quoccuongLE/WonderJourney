@@ -4,7 +4,7 @@ negative_inpainting_prompt: "collage, text, writings, signs, text, white border,
 # negative_inpainting_prompt: "white border, photograph border, picture border, text, signature, segmentation, distortion"
 num_frames: 1
 seed: 2
-# choice: [MiDaS, ZoeDepth]
+# choice: [MiDaS, midas_v3.1, ZoeDepth]
 depth_model: midas_v3.1
 # motion parameters
 motion: rotations # predefined, rotations, round

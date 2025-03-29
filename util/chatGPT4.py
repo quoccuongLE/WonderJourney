@@ -1,4 +1,5 @@
-import openai
+import openai as openailib
+from openai import OpenAI
 import json
 import time
 from pathlib import Path
@@ -10,13 +11,22 @@ import os
 # run 'python -m spacy download en_core_web_sm' to load english language model
 nlp = spacy.load("en_core_web_sm")
 
-openai.api_key = os.environ['OPENAI_API_KEY']
+openai = OpenAI(
+    api_key=os.environ.get("OPENAI_API_KEY"),  # This is the default and can be omitted
+)
+
+def _parse_str(content: str):
+    start_index = content.find('{')
+    end_index = content.rfind('}') + 1
+    json_string = content[start_index:end_index]
+    return json.loads(json_string.replace("'", '"'))
+
 
 class TextpromptGen(object):
-    
+
     def __init__(self, root_path, control=False):
         super(TextpromptGen, self).__init__()
-        self.model = "gpt-4" 
+        self.model = "gpt-4o" 
         self.save_prompt = True
         self.scene_num = 0
         if control:
@@ -37,7 +47,7 @@ class TextpromptGen(object):
         except Exception as e:
             pass
         return
-    
+
     def write_all_content(self, save_dir=None):
         if save_dir is None:
             save_dir = Path(self.root_path)
@@ -45,9 +55,9 @@ class TextpromptGen(object):
         with open(save_dir / 'all_content.txt', "w") as f:
             f.write(self.content)
         return
-    
+
     def regenerate_background(self, style, entities, scene_name, background=None):
-        
+
         if background is not None:
             content = "Please generate a brief scene background with Scene name: " + scene_name + "; Background: " + str(background).strip(".") + ". Entities: " + str(entities) + "; Style: " + str(style)
         else:
@@ -55,7 +65,7 @@ class TextpromptGen(object):
 
         messages = [{"role": "system", "content": "You are an intelligent scene generator. Given a scene and there are 3 most significant common entities. please generate a brief background prompt about 50 words describing common things in the scene. You should not mention the entities in the background prompt. If needed, you can make reasonable guesses."}, \
                     {"role": "user", "content": content}]
-        response = openai.ChatCompletion.create(
+        response = openai.chat.completions.create(
             model=self.model,
             messages=messages,
             timeout=5,
@@ -63,7 +73,7 @@ class TextpromptGen(object):
         background = response['choices'][0]['message']['content']
 
         return background.strip(".")
-    
+
     def run_conversation(self, style=None, entities=None, scene_name=None, background=None, control_text=None):
 
         ######################################
@@ -94,7 +104,7 @@ class TextpromptGen(object):
             self.content += scene_content
         else:
             assert self.scene_num > 0, 'To regenerate the scene description, you should have at least one scene content as prompt.'
-        
+
         if control_text is not None:
             messages = [{"role": "system", "content": "You are an intelligent scene description generator. Given a sentence describing a scene, please translate it into English if not and summarize the scene name and 3 most significant common entities in the scene. You also have to generate a brief background prompt about 50 words describing the scene. You should not mention the entities in the background prompt. If needed, you can make reasonable guesses. Please use the format below: (the output should be json format)\n \
                         {'scene_name': ['scene_name'], 'entities': ['entity_1', 'entity_2', 'entity_3'], 'background': ['background prompt']}"}, \
@@ -103,18 +113,20 @@ class TextpromptGen(object):
             messages = [{"role": "system", "content": "You are an intelligent scene generator. Imaging you are flying through a scene or a sequence of scenes, and there are 3 most significant common entities in each scene. Please tell me what sequentially next scene would you likely to see? You need to generate the scene name and the 3 most common entities in the scene. The scenes are sequentially interconnected, and the entities within the scenes are adapted to match and fit with the scenes. You also have to generate a brief background prompt about 50 words describing the scene. You should not mention the entities in the background prompt. If needed, you can make reasonable guesses. Please use the format below: (the output should be json format)\n \
                         {'scene_name': ['scene_name'], 'entities': ['entity_1', 'entity_2', 'entity_3'], 'background': ['background prompt']}"}, \
                         {"role": "user", "content": self.content}]
-            
+
         for i in range(10):
             try:
-                response = openai.ChatCompletion.create(
+                response = openai.chat.completions.create(
                     model=self.model,
                     messages=messages,
                     timeout=5,
                 )
-                response = response['choices'][0]['message']['content']
+                response = response.choices[0].message.content
                 try:
                     print(response)
-                    output = eval(response)
+                    # output = eval(response)
+                    output = _parse_str(response)
+                    # print(output)
                     _, _, _ = output['scene_name'], output['entities'], output['background']
                     if isinstance(output, tuple):
                         output = output[0]
@@ -132,12 +144,12 @@ class TextpromptGen(object):
                     messages.append(user_message)
                     print("An error occurred when transfering the output of chatGPT into a dict, chatGPT4, let's try again!", str(e))
                     continue
-            except openai.APIError as e:
+            except openailib.APIError as e:
                 print(f"OpenAI API returned an API Error: {e}")
                 print("Wait for a second and ask chatGPT4 again!")
                 time.sleep(1)
                 continue
-        
+
         if self.save_prompt:
             self.write_json(output)
 
@@ -152,7 +164,7 @@ class TextpromptGen(object):
         for token in doc:
             if token.pos_ != "NOUN" and token.pos_ != "ADJ":
                 continue
-            
+
             if token.pos_ == "NOUN":
                 if adj:
                     text += (" " + token.text)
@@ -183,7 +195,7 @@ class TextpromptGen(object):
         if background is not None:
             if isinstance(background, list):
                 background = background[0]
-                
+
             background = self.generate_keywords(background)
             prompt_text = "Style: " + style + ". Entities: "
             for i, entity in enumerate(entities):
@@ -215,7 +227,7 @@ class TextpromptGen(object):
     def evaluate_image(self, image, eval_blur=True):
         api_key = openai.api_key
         base64_image = self.encode_image_pil(image)
-        
+
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {openai.api_key}"
