@@ -10,8 +10,8 @@ finetune_decoder_gen: True
 finetune_decoder_interp: True
 finetune_depth_model: True
 
-stable_diffusion_checkpoint: "stabilityai/stable-diffusion-2-inpainting"
-# stable_diffusion_checkpoint: "PixArt-alpha/PixArt-XL-2-512x512"
+# stable_diffusion_checkpoint: "stabilityai/stable-diffusion-2-inpainting"
+stable_diffusion_checkpoint: "PixArt-alpha/PixArt-XL-2-512x512"
 
 num_scenes: 4
 num_keyframes: 2

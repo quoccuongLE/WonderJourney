@@ -360,7 +360,7 @@ class FrameSyn(torch.nn.Module):
         self.post_masks.append(post_mask)
 
     def decode_latents(self, latents):
-        images = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False)[0]
+        images = self.vae.decode(latents.to(self.vae.dtype) / self.vae.config.scaling_factor, return_dict=False)[0]
         images = (images / 2 + 0.5).clamp(0, 1)
 
         return images

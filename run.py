@@ -33,6 +33,8 @@ from util.utils import load_example_yaml, merge_frames, merge_keyframes
 from util.segment_utils import create_mask_generator
 
 
+from models.inpainting_pipeline import get_inpainter
+
 _dpt_depth_model_type = "DPT_Large"
 
 def evaluate(model):
@@ -128,30 +130,10 @@ def run(config):
     scene_dict = {'scene_name': scene_name, 'entities': entities, 'style': style_prompt, 'background': background_prompt}
     inpainting_prompt = style_prompt + ', ' + content_prompt
 
-    if config["stable_diffusion_checkpoint"] == "PixArt-alpha/PixArt-XL-2-512x512":
-        # text_encoder = T5EncoderModel.from_pretrained(
-        #     "PixArt-alpha/PixArt-XL-2-1024-MS",
-        #     subfolder="text_encoder",
-        #     load_in_8bit=True,
-        # ).to(config["device"])
-        inpainter_pipeline = PixArtAlphaInpaintPipeline.from_pretrained(
-            pretrained_model_name_or_path=config["stable_diffusion_checkpoint"],
-            # text_encoder=text_encoder,
-            use_safetensors=True,
-            torch_dtype=torch.float16,
-            # transformer=None,
-        ).to(config["device"])
-    else:
-        inpainter_pipeline = StableDiffusionInpaintPipeline.from_pretrained(
-                config["stable_diffusion_checkpoint"],
-                safety_checker=None,
-                torch_dtype=torch.float16,
-                revision="fp16",
-            ).to(config["device"])
-    inpainter_pipeline.scheduler = DPMSolverMultistepScheduler.from_config(inpainter_pipeline.scheduler.config)
-    inpainter_pipeline.scheduler = prepare_scheduler(inpainter_pipeline.scheduler)
-    vae = AutoencoderKL.from_pretrained(config["stable_diffusion_checkpoint"], subfolder="vae").to(config["device"])
-
+    inpainter_config = dict(
+        model_name=config["stable_diffusion_checkpoint"], text_encoder="T5EncoderModel"
+    )
+    inpainter_pipeline, vae = get_inpainter(config=inpainter_config)
     rotation_path = config['rotation_path']
     assert len(rotation_path) >= config['num_scenes'] * config['num_keyframes']
 

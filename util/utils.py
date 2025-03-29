@@ -1,22 +1,24 @@
-from PIL import Image
-from PIL import ImageFilter
+import io
+import os
+import random
+import shutil
+from collections import deque
+from datetime import datetime
+
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 import scipy.signal
-from scipy.spatial import cKDTree
-import matplotlib.pyplot as plt
 import torch
-import io
-
-from collections import deque
-from torchvision.transforms import ToTensor
-import os
 import yaml
-import shutil
-from .general_utils import save_video
-from datetime import datetime
 from diffusers.configuration_utils import FrozenDict
+from PIL import Image, ImageFilter
+from scipy.spatial import cKDTree
+from torchvision.transforms import ToTensor
+
+from .general_utils import save_video
+
 
 def find_biggest_connected_inpaint_region(mask):
     H, W = mask.shape
@@ -362,7 +364,7 @@ def merge_keyframes(all_keyframes, save_dir, save_folder='keyframes', fps=1):
     # Ensure that the save_dir exists
     save_path = save_dir / save_folder
     save_path.mkdir(parents=True, exist_ok=True)
-    
+
     # Save each keyframe with a sequential filename
     for i, frame in enumerate(all_keyframes):
         frame.save(save_path / f'{i}.png')
@@ -374,3 +376,18 @@ def merge_keyframes(all_keyframes, save_dir, save_folder='keyframes', fps=1):
 
     save_video(video, save_dir / "keyframes.mp4", fps=fps)
     save_video(video_reverse, save_dir / "keyframes_reverse.mp4", fps=fps)
+
+def seeding(seed):
+    if seed == -1:
+        seed = np.random.randint(2**32)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    print(f"running with seed: {seed}.")
+
+
+def empty_cache():
+    torch.cuda.empty_cache()
+    gc.collect()
